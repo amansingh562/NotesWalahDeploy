@@ -1,0 +1,108 @@
+const express = require('express');
+const bodyParser = require('body-parser');
+const { MongoClient } = require('mongodb');
+const cors = require('cors');
+
+const app = express();
+const PORT = 5002;
+
+// Middleware
+app.use(cors());
+app.use(bodyParser.json());
+
+// MongoDB connection URI
+const uri = 'mongodb://localhost:27017'; // Update with your MongoDB URI
+
+// Database and collection names
+const dbName = 'noteswallah'; // Update with your database name
+const collectionName = 'users';
+
+// Function to connect to MongoDB
+async function connectToMongoDB() {
+  const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology: true });
+  try {
+    // Connect to the MongoDB client
+    await client.connect();
+    console.log('Connected to MongoDB');
+
+    // Set the database and collection
+    const db = client.db(dbName);
+    const collection = db.collection(collectionName);
+
+    // Return the collection object
+    return collection;
+  } catch (error) {
+    console.error('Error connecting to MongoDB:', error);
+    throw error;
+  }
+}
+
+// Route to handle user registration
+app.post('/register', async (req, res) => {
+  const { name, userName, phoneNumber, email, password } = req.body;
+
+  // Check if any required fields are missing
+  if (!name || !userName || !phoneNumber || !email || !password) {
+    return res.status(400).json({ error: 'Please provide all required fields.' });
+  }
+
+  // Connect to MongoDB
+  const collection = await connectToMongoDB();
+
+  try {
+    // Check if the username or email is already taken
+    const existingUser = await collection.findOne({ $or: [{ userName }, { email }] });
+    if (existingUser) {
+      return res.status(400).json({ error: 'Username or email already exists.' });
+    }
+
+    // Insert the new user into the database
+    const newUser = { name, userName, phoneNumber, email, password };
+    await collection.insertOne(newUser);
+
+    // Respond with success message
+    res.status(201).json({ message: 'User registered successfully.' });
+  } catch (error) {
+    console.error('Error registering user:', error);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+app.post('/login', async (req, res) => {
+  const { email, password } = req.body;
+
+  try {
+    // Connect to MongoDB
+    const collection = await connectToMongoDB();
+
+    // Find the user by email
+    const user = await collection.findOne({ email });
+    if (!user) {
+      return res.status(400).json({ error: 'Invalid email or password.' });
+    }
+
+    // Compare passwords (assuming you have stored hashed passwords)
+    const passwordMatch = user.password === password;
+    if (!passwordMatch) {
+      return res.status(400).json({ error: 'Invalid email or password.' });
+    }
+
+    // Respond with success message
+    res.status(200).json({ success: true, message: 'Login successful.', user: { name: user.name, email: user.email } });
+  } catch (error) {
+    console.error('Error logging in:', error);
+    res.status(500).json({ success: false, error: 'Internal server error.' });
+  }
+});
+
+// Route to check if the server is running
+app.get('/', (req, res) => {
+  res.status(200).send(`App is running on port ${PORT}`);
+});
+
+app.get('/', (req, res) => {
+  res.status(200).send('App is running on port'+ PORT,)
+})
+// Start the server
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+});
